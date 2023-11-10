@@ -8,10 +8,8 @@
 #include <pthread.h>
 #include <errno.h>
 
-#define NUM_MUTEXES 4096 // hash table has room for 4096 entries
-
-pthread_mutex_t locks[NUM_MUTEXES] = {
-    [0 ... NUM_MUTEXES-1] = PTHREAD_MUTEX_INITIALIZER
+pthread_mutex_t locks[HASH_TABLE_CAPACITY] = {
+    [0 ...HASH_TABLE_CAPACITY-1] = PTHREAD_MUTEX_INITIALIZER
 };
 
 
@@ -82,29 +80,32 @@ void hash_table_v2_add_entry(struct hash_table_v2 *hash_table,
 {
     
     uint32_t index = bernstein_hash(key) % HASH_TABLE_CAPACITY;
-    
-    
-   
-    if (pthread_mutex_lock(&locks[index]) != 0) {
-        exit(errno);
-    }
+
     
 	struct hash_table_entry *hash_table_entry = get_hash_table_entry(hash_table, key);
 	struct list_head *list_head = &hash_table_entry->list_head;
 	struct list_entry *list_entry = get_list_entry(hash_table, key, list_head);
-
-
+ 
 	/* Update the value if it already exists */
 	if (list_entry != NULL) {
+        if (pthread_mutex_lock(&locks[index]) != 0) {
+            exit(errno);
+        }
 		list_entry->value = value;
+        if (pthread_mutex_unlock(&locks[index]) != 0) {
+            exit(errno);
+        }
 		return;
 	}
 
 	list_entry = calloc(1, sizeof(struct list_entry));
 	list_entry->key = key;
 	list_entry->value = value;
+    
+    if (pthread_mutex_lock(&locks[index]) != 0) {
+        exit(errno);
+    }
 	SLIST_INSERT_HEAD(list_head, list_entry, pointers);
- 
     if (pthread_mutex_unlock(&locks[index]) != 0) {
         exit(errno);
     }
@@ -126,11 +127,14 @@ void hash_table_v2_destroy(struct hash_table_v2 *hash_table)
 		struct hash_table_entry *entry = &hash_table->entries[i];
 		struct list_head *list_head = &entry->list_head;
 		struct list_entry *list_entry = NULL;
+        pthread_mutex_destroy(&locks[i]);
 		while (!SLIST_EMPTY(list_head)) {
+            
 			list_entry = SLIST_FIRST(list_head);
 			SLIST_REMOVE_HEAD(list_head, pointers);
 			free(list_entry);
 		}
 	}
 	free(hash_table);
+    
 }

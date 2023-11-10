@@ -84,9 +84,13 @@ void hash_table_v1_add_entry(struct hash_table_v1 *hash_table,
 	struct list_head *list_head = &hash_table_entry->list_head;
 	struct list_entry *list_entry = get_list_entry(hash_table, key, list_head);
 
+    
 	/* Update the value if it already exists */
 	if (list_entry != NULL) {
 		list_entry->value = value;
+        if (pthread_mutex_unlock(&mutex1) != 0) {
+            exit(errno);
+        }
 		return;
 	}
 
@@ -112,6 +116,7 @@ uint32_t hash_table_v1_get_value(struct hash_table_v1 *hash_table,
 
 void hash_table_v1_destroy(struct hash_table_v1 *hash_table)
 {
+    pthread_mutex_destroy(&mutex1);
 	for (size_t i = 0; i < HASH_TABLE_CAPACITY; ++i) {
 		struct hash_table_entry *entry = &hash_table->entries[i];
 		struct list_head *list_head = &entry->list_head;
